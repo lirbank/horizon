@@ -55,7 +55,7 @@ const user_permitted_validator = `
 }
 `;
 
-describe('Permissions', () => {
+const all_tests = (collection) => {
   describe('Template', () => {
     it('any', () => {
       const rule = new Rule('foo', { template: 'any()' });
@@ -147,6 +147,7 @@ describe('Permissions', () => {
       assert(!rule.is_match(make_request('query', 'test', { find_all: [ { bar: 'baz' } ] }), context));
       assert(!rule.is_match(make_request('query', 'test', { find_all: [ { owner: (context.id + 1) } ] }), context));
       assert(!rule.is_match(make_request('query', 'test', { find_all: [ { owner: context.id, bar: 'baz' } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { owner: context.id }, { other: context.id } ] }), context));
       assert(rule.is_match(make_request('query', 'test', { find_all: [ { owner: context.id } ] }), context));
     });
 
@@ -160,6 +161,22 @@ describe('Permissions', () => {
       assert(!rule.is_match(make_request('query', 'test', { find_all: [ { owner: (context.id + 1) } ] }), context));
       assert(!rule.is_match(make_request('query', 'test', { find_all: [ { owner: context.id, bar: 'baz' } ] }), context));
       assert(rule.is_match(make_request('query', 'test', { find_all: [ { owner: context.id, key: 3 } ] }), context));
+    });
+
+    it('multiple items in findAll', () => {
+      const rule = new Rule('foo', { template: 'collection("test").findAll({ a: userId() }, { b: userId() })' });
+      assert(rule.is_valid());
+      assert(!rule.is_match(make_request('query', 'test', { find_all: { } }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: true }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { bar: 'baz' } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { a: (context.id + 1) }, { b: context.id } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { a: context.id, bar: 'baz' } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { a: context.id, b: context.id } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { a: context.id } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { b: context.id } ] }), context));
+      assert(!rule.is_match(make_request('query', 'test', { find_all: [ { a: context.id }, { b: context.id, bar: 'baz' } ] }), context));
+      assert(rule.is_match(make_request('query', 'test', { find_all: [ { a: context.id }, { b: context.id } ] }), context));
     });
 
     it('collection fetch', () => {
@@ -287,10 +304,9 @@ describe('Permissions', () => {
   });
 
   describe('Validation', () => {
-    const table_name = 'validation_test';
     const metadata = {
       collection: () => ({
-        table: r.table(table_name),
+        table: r.table(collection),
         get_matching_index: () => ({ name: 'id', fields: [ 'id' ] }),
       }),
       connection: () => utils.rdb_conn(),
@@ -301,17 +317,10 @@ describe('Permissions', () => {
       table_data.push({ id: i });
     }
 
-    before('Start RethinkDB Server', () => utils.start_rethinkdb());
-    before('Creating test table', () =>
-      r.tableCreate(table_name).run(utils.rdb_conn()));
-    after('Deleting test table', () =>
-      r.tableDrop(table_name).run(utils.rdb_conn()));
-    after('Stop RethinkDB Server', () => utils.stop_rethinkdb());
-
+    beforeEach('Clear test table', () =>
+      r.table(collection).delete().run(utils.rdb_conn()));
     beforeEach('Populate test table', () =>
-      r.table(table_name).insert(table_data).run(utils.rdb_conn()));
-    afterEach('Clearing test table', () =>
-      r.table(table_name).delete().run(utils.rdb_conn()));
+      r.table(collection).insert(table_data).run(utils.rdb_conn()));
 
     const make_run = (run_fn) =>
       (options, validator, limit) => new Promise((resolve, reject) => {
@@ -320,7 +329,7 @@ describe('Permissions', () => {
         const results = [ ];
         const ruleset = new Ruleset();
         ruleset.update([ new Rule('test', { template: 'any()', validator }) ]);
-        options.collection = table_name;
+        options.collection = collection;
 
         const add_response = (res) => {
           res.data.forEach((item) => results.push(item));
@@ -408,7 +417,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 11 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 11);
-          return r.table(table_name).get(11).eq(null)
+          return r.table(collection).get(11).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -416,21 +425,21 @@ describe('Permissions', () => {
         run({ data: [ { id: 13 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 13);
-          return r.table(table_name).get(13).eq(null)
+          return r.table(collection).get(13).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 11 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 11 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
@@ -441,7 +450,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 11 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 11);
-          return r.table(table_name).get(11).eq(null)
+          return r.table(collection).get(11).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -449,21 +458,21 @@ describe('Permissions', () => {
         run({ data: [ { id: 13 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 13);
-          return r.table(table_name).get(13).eq(null)
+          return r.table(collection).get(13).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 11 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 11 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
@@ -474,7 +483,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 11 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 11);
-          return r.table(table_name).get(11).eq(null)
+          return r.table(collection).get(11).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -482,21 +491,21 @@ describe('Permissions', () => {
         run({ data: [ { id: 13 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 13);
-          return r.table(table_name).get(13).eq(null)
+          return r.table(collection).get(13).eq(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 11 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 11 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(11).ne(null)
+          return r.table(collection).get(11).ne(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
@@ -507,7 +516,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 1, value: 5 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 1);
-          return r.table(table_name).get(1).hasFields('value').not()
+          return r.table(collection).get(1).hasFields('value').not()
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -515,21 +524,21 @@ describe('Permissions', () => {
         run({ data: [ { id: 3, value: 5 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 3);
-          return r.table(table_name).get(3).hasFields('value').not()
+          return r.table(collection).get(3).hasFields('value').not()
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 1, value: 5 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).hasFields('value')
+          return r.table(collection).get(1).hasFields('value')
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 1, value: 5 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).hasFields('value')
+          return r.table(collection).get(1).hasFields('value')
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
@@ -540,7 +549,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 1, value: 5 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 1);
-          return r.table(table_name).get(1).hasFields('value').not()
+          return r.table(collection).get(1).hasFields('value').not()
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -548,21 +557,21 @@ describe('Permissions', () => {
         run({ data: [ { id: 3, value: 5 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 3);
-          return r.table(table_name).get(3).hasFields('value').not()
+          return r.table(collection).get(3).hasFields('value').not()
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 1, value: 5 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).hasFields('value')
+          return r.table(collection).get(1).hasFields('value')
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 1, value: 5 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).hasFields('value')
+          return r.table(collection).get(1).hasFields('value')
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
@@ -573,7 +582,7 @@ describe('Permissions', () => {
         run({ data: [ { id: 1 } ] }, permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 1);
-          return r.table(table_name).get(1).ne(null)
+          return r.table(collection).get(1).ne(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
@@ -581,23 +590,27 @@ describe('Permissions', () => {
         run({ data: [ { id: 3 } ] }, user_permitted_validator).then((res) => {
           assert.strictEqual(res.length, 1);
           assert.strictEqual(res[0].id, 3);
-          return r.table(table_name).get(3).ne(null)
+          return r.table(collection).get(3).ne(null)
             .branch(r.error('write did not go through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden', () =>
         run({ data: [ { id: 1 } ] }, forbidden_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).eq(null)
+          return r.table(collection).get(1).eq(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
 
       it('forbidden based on context', () =>
         run({ data: [ { id: 1 } ] }, user_permitted_validator).then((res) => {
           assert.deepStrictEqual(res, [ { error: 'Operation not permitted.' } ]);
-          return r.table(table_name).get(1).eq(null)
+          return r.table(collection).get(1).eq(null)
             .branch(r.error('write went through'), null).run(utils.rdb_conn());
         }));
     });
   });
-});
+};
+
+const suite = (collection) => describe('Permissions', () => all_tests(collection));
+
+module.exports = { suite };
