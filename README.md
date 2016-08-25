@@ -1,58 +1,87 @@
-# Horizon Client Library
+<img style="width:100%;" src="/github-banner.png">
 
-The Horizon client library. Built to interact with the [Horizon Server](/server) API. Provides all the tooling to build a fully-functional and reactive front-end web application.
+# [Horizon](https://horizon.io)
+[![CircleCI](https://circleci.com/gh/rethinkdb/horizon/tree/next.svg?style=svg)](https://circleci.com/gh/rethinkdb/horizon/tree/next)
 
-## Building
+## What is Horizon?
 
-Running `npm install` for the first time will build the browser bundle and lib files.
+Horizon is an open-source developer platform for building sophisticated realtime
+apps. It provides a complete backend that makes it dramatically simpler to
+build, deploy, manage, and scale engaging JavaScript web and mobile apps.
+Horizon is extensible, integrates with the Node.js stack, and allows building
+modern, arbitrarily complex applications.
 
-1. `npm install`
-2. `npm run dev` (or `npm run build` or `npm run compile`, see below)
+Horizon is built on top of [RethinkDB](https://www.rethinkdb.com) and consists of
+four components:
 
-### Build Options
+- [__Horizon server__](/server) -- a middleware server that connects to/is built on
+  top of RethinkDB, and exposes a simple API/protocol to front-end
+  applications.
+- [__Horizon client library__](/client) -- a JavaScript client library that wraps
+  Horizon server's protocol in a convenient API for front-end
+  developers.
+- [__Horizon CLI - `hz`__](/cli) -- a command-line tool aiding in scaffolding, development, and deployment
+- [__GraphQL support__](https://github.com/rethinkdb/horizon/issues/125) -- the server will have a GraphQL adapter so anyone can get started building React/Relay apps without writing any backend code at the beginning. This will not ship in v1, but we'll follow up with a GraphQL adapter quickly after launch.
 
-Command             | Description
---------------------|----------------------------
-npm run build       | Build dist/horizon.js minified production browser bundle
-npm run builddebug  | Build with webpack and output debug logging
-npm run compile     | Compile src to lib for CommonJS module loaders (such as webpack, browserify)
-npm run coverage    | Run code coverage tool - `istanbul`
-npm run dev         | Watch directory for changes, build dist/horizon.js unminified browser bundle
-npm run devtest     | Serve `dist` directory to build app and continuously run tests
-npm test            | Run tests in node
-npm run lint -s     | Lint src
-npm run test        | Run tests
+Horizon currently has all the following services available to developers:
 
-## Running tests
+- ✅ __Subscribe__ -- a streaming API for building realtime apps directly from the
+  browser without writing any backend code.
+- ✅ __Auth__ -- an authentication API that connects to common auth providers
+  (e.g. Facebook, Google, GitHub).
+- ✅ __Identity__ -- an API for listing and manipulating user accounts.
+- ✅ __Permissions__ -- a security model that allows the developer to protect
+   data from unauthorized access.
 
-* `npm test` or open `dist/test.html` in your browser after getting setup and while you also have Horizon server with the `--dev` flag running on `localhost`.
-* You can spin up a dev server by cloning the horizon repo and running `node serve.js` in `test` directory in repo root. Then tests can be accessed from <http://localhost:8181/test.html>. Source maps work properly when served via http, not from file system. You can test the production version via `NODE_ENV=production node serve.js`. You may want to use `test/setupDev.sh` to set the needed local npm links for development.
+Upcoming versions of Horizon will likely expose the following
+additional services:
 
-## Docs
+- __Session management__ -- manage browser session and session
+  information.
+- __Geolocation__ -- an API that makes it very easy to build
+  location-aware apps.
+- __Presence__ -- an API for detecting presence information for a given
+  user and sharing it with others.
+- __Plugins__ -- a system for extending Horizon with user-defined services
+  in a consistent, discoverable way.
+- __Backend__ -- an API/protocol to integrate custom backend code with
+  Horizon server/client-libraries.
 
+## Why Horizon?
 
-### Getting Started
+While technologies like [RethinkDB](http://www.rethinkdb.com) and
+[WebSocket](https://en.wikipedia.org/wiki/WebSocket) make it possible to build
+engaging realtime apps, empirically there is still too much friction for most
+developers. Building realtime apps now requires understanding and manually
+orchestrating multiple systems across the software stack, understanding
+distributed stream processing, and learning how to deploy and scale realtime systems. The
+learning curve is quite steep, and most of the initial work involves boilerplate
+code that is far removed from the primary task of building a realtime app.
 
-[horizon.io/docs/getting-started](https://horizon.io/docs/getting-started/).
+Horizon sets out to solve this problem. Developers can start building
+apps using their favorite front-end framework using Horizon's APIs
+without having to write any backend code.
 
-### APIs
+Since Horizon stores data in RethinkDB, once the app gets sufficiently
+complex to need custom business logic on the backend, developers can
+incrementally add backend code at any time in the development cycle of
+their app.
 
-* Horizon API - [horizon.io/api/horizon/](https://horizon.io/api/horizon/)
-* Collection API - [horizon.io/api/collection/](https://horizon.io/api/collection/)
+## Get Involved
 
-## Users and Groups
+We'd love for you to help us build Horizon. If you'd like to be a contributor,
+check out our [Contributing guide](/CONTRIBUTING.md).
 
-[horizon.io/docs/users/](https://horizon.io/docs/users/)
+Also, to stay up-to-date on all Horizon related news and the community you should
+definitely [join us on Slack](http://slack.rethinkdb.com), [follow us on Twitter](https://twitter.com/horizonjs),
+and join our Horizon mailing list at [Horizon.io](https://horizon.io).
 
-## Setting Permissions
+![](/assets/Lets-go.png)
 
-[horizon.io/docs/permissions/](http://horizon.io/docs/permissions/)
+## FAQ
 
-### Clearing tokens
+Check out our FAQ at [horizon.io/faq](https://horizon.io/faq/)
 
-Sometimes you may wish to delete all authentication tokens from localStorage. You can do that with:
+### How will Horizon be licensed?
 
-``` js
-// Note the 'H'
-Horizon.clearAuthTokens()
-```
+The Horizon server, client and cli are available under the MIT license
